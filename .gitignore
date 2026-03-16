@@ -201,6 +201,11 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# Project outputs
+artifacts/
+data/text8.zip
+data/text8.txt
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
