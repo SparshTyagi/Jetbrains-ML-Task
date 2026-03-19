@@ -4,18 +4,23 @@ import numpy as np
 
 
 def sigmoid(x: np.ndarray | float) -> np.ndarray | float:
-    x_arr = np.asarray(x)
-    positive = x_arr >= 0
-    negative = ~positive
+    """Numerically stable sigmoid: avoids overflow for large |x|.
 
-    result = np.empty_like(x_arr, dtype=np.float64)
-    result[positive] = 1.0 / (1.0 + np.exp(-x_arr[positive]))
-    exp_x = np.exp(x_arr[negative])
-    result[negative] = exp_x / (1.0 + exp_x)
+    For x >= 0: sigma(x) = 1 / (1 + exp(-x))
+    For x  < 0: sigma(x) = exp(x) / (1 + exp(x))
 
-    if np.isscalar(x):
-        return float(result.item())
-    return result
+    Both forms are mathematically equivalent but each is well-conditioned on
+    its respective domain, ensuring that exp() never receives a large positive
+    argument.
+    """
+    x_arr = np.asarray(x, dtype=np.float64)
+    exp_neg_abs = np.exp(-np.abs(x_arr))
+    out = np.where(
+        x_arr >= 0,
+        1.0 / (1.0 + exp_neg_abs),
+        exp_neg_abs / (1.0 + exp_neg_abs),
+    )
+    return float(out.item()) if np.isscalar(x) or x_arr.ndim == 0 else out
 
 
 class SkipGramNegativeSampling:
@@ -28,6 +33,25 @@ class SkipGramNegativeSampling:
         self.output_embeddings = np.zeros((vocab_size, embedding_dim), dtype=np.float64)
 
     def train_example(self, center_id: int, positive_context_id: int, negative_context_ids: np.ndarray, lr: float) -> float:
+        """Run one SGNS training step and update embeddings in place.
+
+        Objective for one (center, positive, negatives) triple:
+            L = -log σ(u_o · v_c) - Σ_i log σ(-u_nᵢ · v_c)
+
+        Analytical gradients:
+            ∂L/∂v_c   = (σ(u_o · v_c) - 1) u_o  +  Σ_i σ(u_nᵢ · v_c) u_nᵢ
+            ∂L/∂u_o   = (σ(u_o · v_c) - 1) v_c
+            ∂L/∂u_nᵢ = σ(u_nᵢ · v_c) v_c
+
+        Args:
+            center_id: Index of the center word in the input embedding matrix.
+            positive_context_id: Index of the observed context word in the output matrix.
+            negative_context_ids: 1-D array of negative-sample word indices.
+            lr: Current learning rate.
+
+        Returns:
+            Scalar loss value for this example.
+        """
         v_c = self.input_embeddings[center_id].copy()
         u_o = self.output_embeddings[positive_context_id].copy()
         u_neg = self.output_embeddings[negative_context_ids].copy()

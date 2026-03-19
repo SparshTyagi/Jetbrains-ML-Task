@@ -58,6 +58,40 @@ def encode_tokens(tokens: list[str], vocabulary: Vocabulary, max_tokens: int | N
     return np.asarray(encoded, dtype=np.int32)
 
 
+def subsample_tokens(
+    token_ids: np.ndarray,
+    counts: np.ndarray,
+    threshold: float,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Subsample frequent words using the word2vec probability formula.
+
+    Each word w is discarded with probability:
+        P(discard w) = 1 - sqrt(threshold / f(w))
+    where f(w) = count(w) / total_tokens.
+
+    Keeping probability: P(keep w) = min(1, sqrt(threshold / f(w))).
+
+    This balances the representation of rare and frequent words, improving
+    embedding quality by reducing the dominance of stop words.
+
+    Args:
+        token_ids: 1-D integer array of token indices.
+        counts: Vocabulary-wide word count array (counts[i] = frequency of word i).
+        threshold: Subsampling threshold t (original paper recommends 1e-5 to 1e-3).
+        rng: NumPy random generator for reproducibility.
+
+    Returns:
+        Filtered 1-D integer array with frequent words probabilistically dropped.
+    """
+    total = float(counts.sum())
+    # Compute keep probability for every word in the vocabulary
+    freqs = counts[token_ids].astype(np.float64) / total
+    keep_prob = np.minimum(1.0, np.sqrt(threshold / freqs))
+    mask = rng.random(token_ids.shape[0]) < keep_prob
+    return token_ids[mask]
+
+
 def build_negative_sampling_distribution(counts: np.ndarray, power: float = 0.75) -> np.ndarray:
     weights = counts.astype(np.float64) ** power
     distribution = weights / weights.sum()
