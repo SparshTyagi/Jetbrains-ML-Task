@@ -14,6 +14,7 @@ from .data import (
     encode_tokens,
     generate_skipgram_pairs,
     read_text_file,
+    subsample_tokens,
     tokenize,
 )
 from .model import SkipGramNegativeSampling
@@ -29,6 +30,7 @@ def parse_args() -> TrainingConfig:
     parser.add_argument("--min-count", type=int, default=5)
     parser.add_argument("--max-vocab-size", type=int, default=50000)
     parser.add_argument("--max-tokens", type=int, default=300000)
+    parser.add_argument("--subsample-threshold", type=float, default=1e-4)
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--learning-rate", type=float, default=0.025)
     parser.add_argument("--seed", type=int, default=42)
@@ -44,6 +46,7 @@ def parse_args() -> TrainingConfig:
         min_count=args.min_count,
         max_vocab_size=args.max_vocab_size,
         max_tokens=args.max_tokens,
+        subsample_threshold=args.subsample_threshold,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         seed=args.seed,
@@ -87,6 +90,16 @@ def run_training(config: TrainingConfig) -> None:
     token_ids = encode_tokens(tokens=tokens, vocabulary=vocabulary, max_tokens=config.max_tokens)
     print(f"Encoded token count: {token_ids.shape[0]:,}")
 
+    # Subsample frequent words (word2vec paper, Mikolov et al. 2013).
+    # Words are dropped with probability P(discard w) = 1 - sqrt(t / f(w)).
+    token_ids = subsample_tokens(
+        token_ids=token_ids,
+        counts=vocabulary.counts,
+        threshold=config.subsample_threshold,
+        rng=rng,
+    )
+    print(f"Token count after subsampling: {token_ids.shape[0]:,}")
+
     negative_distribution = build_negative_sampling_distribution(vocabulary.counts)
 
     model = SkipGramNegativeSampling(
@@ -94,6 +107,11 @@ def run_training(config: TrainingConfig) -> None:
         embedding_dim=config.embedding_dim,
         rng=rng,
     )
+
+    # Estimate total training steps for a linear LR decay schedule.
+    # Average pairs per token ≈ window_size (expected value of the dynamic window
+    # is window_size/2 on each side, times 2 sides).
+    total_steps = max(1, config.epochs * token_ids.shape[0] * config.window_size)
 
     start_time = time.time()
     global_step = 0
@@ -109,7 +127,6 @@ def run_training(config: TrainingConfig) -> None:
         contexts = contexts[order]
 
         epoch_loss = 0.0
-        total_steps = max(1, config.epochs * centers.shape[0])
 
         for idx in range(centers.shape[0]):
             decay = max(0.0001, 1.0 - (global_step / total_steps))

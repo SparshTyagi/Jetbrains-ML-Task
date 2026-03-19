@@ -1,3 +1,4 @@
 """Project constants."""
 
 DEFAULT_RANDOM_SEED = 42
+DEFAULT_SUBSAMPLE_THRESHOLD = 1e-4

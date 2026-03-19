@@ -7,6 +7,7 @@ The implemented variant is skip-gram with negative sampling (SGNS), including:
 - Manual forward pass and objective computation.
 - Manual analytical gradients and in-place parameter updates.
 - Negative sampling with a unigram distribution raised to the 0.75 power.
+- Subsampling of frequent words using the probability formula from Mikolov et al. 2013.
 - Reproducible training runs and test coverage (including finite-difference gradient checks).
 
 ## Assignment Compliance
@@ -17,7 +18,7 @@ The implemented variant is skip-gram with negative sampling (SGNS), including:
 
 ## Repository Structure
 
-- `src/word2vec/data.py`: tokenization, vocabulary building, corpus encoding, skip-gram pair generation.
+- `src/word2vec/data.py`: tokenization, vocabulary building, corpus encoding, subsampling, skip-gram pair generation.
 - `src/word2vec/model.py`: SGNS model, numerically stable sigmoid, per-example training step.
 - `src/word2vec/train.py`: end-to-end training pipeline and artifact saving.
 - `src/word2vec/eval.py`: nearest-neighbor inspection via cosine similarity.
@@ -69,6 +70,7 @@ Important arguments:
 - `--min-count` (default: `5`)
 - `--max-vocab-size` (default: `50000`)
 - `--max-tokens` (default: `300000`, useful for faster experiments)
+- `--subsample-threshold` (default: `1e-4`, set to `0` to disable)
 
 ## Evaluate Nearest Neighbors
 
@@ -98,8 +100,8 @@ Gradients used in code:
 
 ## Correctness and Quality Checks
 
-- Unit tests for tokenization, vocabulary, pair generation, and negative-sampling distribution.
-- Finite-difference gradient check for the core training step.
+- Unit tests for tokenization, vocabulary, pair generation, subsampling, and negative-sampling distribution.
+- Finite-difference gradient checks for all three gradient directions: center embedding (v_c), positive context (u_o), and negative samples (u_nᵢ).
 - Stable sigmoid implementation to avoid overflow issues.
 - Deterministic random seeding for reproducibility.
 
