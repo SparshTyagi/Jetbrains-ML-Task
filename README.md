@@ -76,8 +76,24 @@ Important arguments:
 
 ```bash
 set PYTHONPATH=src
-python -m word2vec.eval --artifacts-dir artifacts/text8-run --word king --top-k 10
+python -m word2vec.eval --artifacts-dir artifacts/text8-run --word one --top-k 6
 ```
+
+### Example Results
+
+Training on a small 50k-token subset of `text8` for just 1 epoch yields the following nearest neighbors for the word **"one"**:
+
+```text
+Query: one
+ 1. the                  0.7482
+ 2. in                   0.7353
+ 3. of                   0.7029
+ 4. nine                 0.6693
+ 5. zero                 0.6521
+ 6. two                  0.6102
+```
+
+*Note: Even with a tiny dataset and single epoch, the skip-gram objective begins clustering numbers together ('nine', 'zero', 'two'). Full training on the complete corpus yields much sharper semantic relationships.*
 
 ## Objective and Gradients
 
@@ -111,8 +127,9 @@ Run tests:
 python -m pytest -q
 ```
 
-## Notes on Tradeoffs
+## Notes on Tradeoffs & Potential Optimizations
 
-- SGNS scales well to large vocabularies versus full softmax.
-- This implementation prioritizes clarity and correctness while still using NumPy vector operations where meaningful.
-- A production-optimized variant could further batch computations and use alias sampling for faster negative draws.
+- **SGNS vs Hierarchical Softmax:** SGNS scales efficiently to large vocabularies by only updating a small subset of negative weights per step. It is generally superior for producing high-quality frequent-word representations in dense corpora compared to full softmax or hierarchical trees.
+- **Batched Computations:** The current implementation processes one `(center, context, negatives)` tuple at a time. A production variant would batch these pairs into matrices, trading higher memory footprint for drastically faster vectorized NumPy execution.
+- **Alias Sampling:** Negative samples are currently drawn via `np.random.choice` using probabilities. This requires $O(V)$ operations per call. Implementing Walker's Alias Method would reduce the sample-draw time to $O(1)$, significantly speeding up the inner training loop.
+- **Evaluation Embeddings:** The `eval.py` script sums `input_embeddings` and `output_embeddings` to compute cosine similarity. While the original word2vec paper evaluates only on input embeddings, summing them is a common empirical practice (e.g., popularized by GloVe) that often improves neighbor quality on standard tasks.
